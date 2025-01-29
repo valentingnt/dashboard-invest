@@ -4,7 +4,6 @@ import { formatCurrency } from "@/lib/utils"
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState, useMemo } from "react"
-import { useTheme } from "next-themes"
 
 interface ChartDataPoint {
   date: string;
@@ -32,7 +31,6 @@ type TimeRange = keyof typeof TIME_RANGES;
 
 export function PerformanceChart({ data, assets }: PerformanceChartProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
-  const { theme } = useTheme();
 
   const filteredData = useMemo(() => {
     if (timeRange === "all") return data;
@@ -74,14 +72,14 @@ export function PerformanceChart({ data, assets }: PerformanceChartProps) {
     });
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active: boolean, payload: { name: string, value: number, color: string }[], label: string }) => {
     if (!active || !payload) return null;
   
     return (
       <div className="rounded-lg border bg-background/80 backdrop-blur-md p-3 shadow-lg">
         <p className="font-medium">{formatDate(label as string)}</p>
         <div className="mt-2 space-y-2">
-          {payload.map((entry: any) => (
+          {payload.map((entry: { name: string, value: number, color: string }) => (
             <div key={entry.name} className="flex items-center gap-2">
               <div
                 className="h-3 w-3 rounded-full"
@@ -142,7 +140,7 @@ export function PerformanceChart({ data, assets }: PerformanceChartProps) {
               stroke="currentColor"
               className="text-muted-foreground"
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip active={true} payload={[]} label={''} />} />
             <Legend />
             {assets.map((asset, index) => (
               <Line

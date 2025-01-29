@@ -21,7 +21,7 @@ export default function NewTransactionPage() {
     asset_id: '',
     type: 'buy',
     quantity: '',
-    price_per_unit: '',
+    total_amount: '',
     transaction_date: new Date().toISOString().split('T')[0],
   }
   const [formData, setFormData] = useState(initialFormState)
@@ -51,15 +51,37 @@ export default function NewTransactionPage() {
     fetchAssets()
   }, [toast])
 
+  const validateForm = () => {
+    if (!formData.asset_id) {
+      throw new Error('Please select an asset')
+    }
+
+    const quantity = parseFloat(formData.quantity)
+    const totalAmount = parseFloat(formData.total_amount)
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error('Please enter a valid quantity greater than 0')
+    }
+
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      throw new Error('Please enter a valid total amount greater than 0')
+    }
+
+    const pricePerUnit = totalAmount / quantity
+    if (!Number.isFinite(pricePerUnit)) {
+      throw new Error('Invalid quantity or total amount')
+    }
+
+    return { quantity, totalAmount, pricePerUnit }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // Calculate total amount
-      const quantity = parseFloat(formData.quantity)
-      const pricePerUnit = parseFloat(formData.price_per_unit)
-      const totalAmount = quantity * pricePerUnit
+      // Validate form data
+      const { quantity, totalAmount, pricePerUnit } = validateForm()
 
       const { error } = await supabase
         .from('transactions')
@@ -74,7 +96,12 @@ export default function NewTransactionPage() {
           }
         ])
 
-      if (error) throw error
+      if (error) {
+        if (error.code === '22P02') {
+          throw new Error('Invalid data format. Please check your inputs.')
+        }
+        throw error
+      }
 
       // Reset form to initial state
       setFormData({
@@ -94,7 +121,7 @@ export default function NewTransactionPage() {
       console.error('Error adding transaction:', error)
       toast({
         title: "Error",
-        description: "Failed to add transaction. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to add transaction. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -115,10 +142,11 @@ export default function NewTransactionPage() {
         <Card className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="asset">Asset</Label>
+              <Label htmlFor="asset">Asset *</Label>
               <Select
                 value={formData.asset_id}
                 onValueChange={(value) => setFormData({ ...formData, asset_id: value })}
+                required
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select an asset" />
@@ -134,10 +162,11 @@ export default function NewTransactionPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">Type *</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value) => setFormData({ ...formData, type: value })}
+                required
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -150,11 +179,12 @@ export default function NewTransactionPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity</Label>
+              <Label htmlFor="quantity">Quantity *</Label>
               <Input
                 id="quantity"
                 type="number"
                 step="any"
+                min="0"
                 value={formData.quantity}
                 onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                 required
@@ -162,19 +192,20 @@ export default function NewTransactionPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="price_per_unit">Price per Unit (€)</Label>
+              <Label htmlFor="total_amount">Total Amount (€) *</Label>
               <Input
-                id="price_per_unit"
+                id="total_amount"
                 type="number"
                 step="any"
-                value={formData.price_per_unit}
-                onChange={(e) => setFormData({ ...formData, price_per_unit: e.target.value })}
+                min="0"
+                value={formData.total_amount}
+                onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="transaction_date">Transaction Date</Label>
+              <Label htmlFor="transaction_date">Transaction Date *</Label>
               <Input
                 id="transaction_date"
                 type="date"
