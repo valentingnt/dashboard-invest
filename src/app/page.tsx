@@ -6,6 +6,9 @@ import { supabase } from '@/lib/supabase/client'
 import { PostgrestError } from '@supabase/supabase-js'
 import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, BarChartIcon } from 'lucide-react'
 import { PerformanceChart } from '@/components/performance-chart'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 function formatPercentage(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
@@ -169,9 +172,19 @@ export default async function DashboardPage() {
     <div className="flex justify-center min-h-screen text-primary bg-background">
       <main className="flex flex-col w-full max-w-[1440px] mx-auto my-8 px-6">
         <div className="space-y-12">
+          {/* Header with Theme Toggle */}
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-semibold tracking-tight">Mon Portfolio</h1>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" asChild>
+                <Link href="/transactions/new">Add Transaction</Link>
+              </Button>
+              <ThemeToggle />
+            </div>
+          </div>
+
           {/* Portfolio Summary Section */}
           <div className="space-y-4">
-            <h1 className="text-3xl font-semibold tracking-tight">Mon Portfolio</h1>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-8 border border-primary/20 shadow-sm hover:shadow-md transition-all duration-200">
                 <div className="space-y-8">

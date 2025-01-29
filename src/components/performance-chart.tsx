@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils"
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState, useMemo } from "react"
+import { useTheme } from "next-themes"
 
 interface ChartDataPoint {
   date: string;
@@ -31,6 +32,7 @@ type TimeRange = keyof typeof TIME_RANGES;
 
 export function PerformanceChart({ data, assets }: PerformanceChartProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
+  const { theme } = useTheme();
 
   const filteredData = useMemo(() => {
     if (timeRange === "all") return data;
@@ -72,69 +74,90 @@ export function PerformanceChart({ data, assets }: PerformanceChartProps) {
     });
   };
 
-  return (
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Évolution du portefeuille</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {filteredData.length} points
-            </span>
-            <Select
-              value={timeRange}
-              onValueChange={(value: TimeRange) => setTimeRange(value)}
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Période" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(TIME_RANGES).map(([value, { label }]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload) return null;
+  
+    return (
+      <div className="rounded-lg border bg-background/80 backdrop-blur-md p-3 shadow-lg">
+        <p className="font-medium">{formatDate(label as string)}</p>
+        <div className="mt-2 space-y-2">
+          {payload.map((entry: any) => (
+            <div key={entry.name} className="flex items-center gap-2">
+              <div
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="font-medium">{entry.name}:</span>
+              <span>{formatCurrency(entry.value)}</span>
+            </div>
+          ))}
         </div>
+      </div>
+    );
+  };
 
-        <div className="h-[300px] w-full">
-          <ResponsiveContainer>
-            <LineChart data={filteredData}>
-              <XAxis 
-                dataKey="date" 
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                minTickGap={30}
-                tickFormatter={(date) => formatDate(date, true)}
-              />
-              <YAxis 
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `${(value / 1000).toFixed(1)}k€`}
-                domain={yAxisDomain}
-              />
-              <Tooltip 
-                formatter={(value: number) => formatCurrency(value)}
-                labelFormatter={(label) => formatDate(label as string)}
-              />
-              <Legend />
-              {assets.map((asset, index) => (
-                <Line
-                  key={asset.id}
-                  type="monotone"
-                  dataKey={asset.name}
-                  stroke={colors[index]}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Évolution du portefeuille</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {filteredData.length} points
+          </span>
+          <Select
+            value={timeRange}
+            onValueChange={(value: TimeRange) => setTimeRange(value)}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Période" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(TIME_RANGES).map(([value, { label }]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
               ))}
-            </LineChart>
-          </ResponsiveContainer>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
+      <div className="h-[300px] w-full">
+        <ResponsiveContainer>
+          <LineChart data={filteredData}>
+            <XAxis 
+              dataKey="date" 
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={30}
+              tickFormatter={(date) => formatDate(date, true)}
+              stroke="currentColor"
+              className="text-muted-foreground"
+            />
+            <YAxis 
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) => `${(value / 1000).toFixed(1)}k€`}
+              domain={yAxisDomain}
+              stroke="currentColor"
+              className="text-muted-foreground"
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+            {assets.map((asset, index) => (
+              <Line
+                key={asset.id}
+                type="monotone"
+                dataKey={asset.name}
+                stroke={colors[index]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 } 
