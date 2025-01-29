@@ -1,101 +1,353 @@
-import Image from "next/image";
+import { Card } from "@/components/ui/card"
+import { formatCurrency } from "@/lib/utils"
+import { Asset, Transaction, AssetWithPrice } from '@/lib/types'
+import { enrichAssetWithPriceAndTransactions } from '@/lib/services/price-service'
+import { supabase } from '@/lib/supabase/client'
+import { PostgrestError } from '@supabase/supabase-js'
+import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, BarChartIcon } from 'lucide-react'
+import { PerformanceChart } from '@/components/performance-chart'
 
-export default function Home() {
+function formatPercentage(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+// Function to generate dates between start and end
+function getDates(startDate: Date, endDate: Date) {
+  const dates: Date[] = [];
+  const currentDate = new Date(startDate);
+  currentDate.setHours(0, 0, 0, 0); // Set to midnight
+
+  while (currentDate <= endDate) {
+    dates.push(new Date(currentDate));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dates;
+}
+
+// Function to format date for chart
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { 
+    day: '2-digit', 
+    month: '2-digit',
+    year: 'numeric' 
+  });
+}
+
+interface ChartDataPoint {
+  date: string;
+  [key: string]: number | string;
+}
+
+export default async function DashboardPage() {
+  // Fetch assets and transactions from Supabase
+  const { data: assets, error: assetsError } = await supabase
+    .from('assets')
+    .select('*') as { data: Asset[] | null, error: PostgrestError | null }
+
+  const { data: transactions, error: transactionsError } = await supabase
+    .from('transactions')
+    .select('*')
+    .order('transaction_date', { ascending: false }) as { data: Transaction[] | null, error: PostgrestError | null }
+
+  if (assetsError) {
+    console.error('Error fetching assets:', assetsError)
+    return <div>Error loading assets</div>
+  }
+
+  if (transactionsError) {
+    console.error('Error fetching transactions:', transactionsError)
+    return <div>Error loading transactions</div>
+  }
+
+  if (!assets || !transactions) {
+    return <div>Loading...</div>
+  }
+
+  // Enrich assets with current prices and calculations
+  const enrichedAssets: AssetWithPrice[] = await Promise.all(
+    assets.map(asset => enrichAssetWithPriceAndTransactions(asset, transactions))
+  )
+
+  // Calculate total portfolio metrics
+  const totalValue = enrichedAssets.reduce((sum, asset) => sum + asset.totalValue, 0)
+  const totalInvested = enrichedAssets.reduce((sum, asset) => {
+    const assetTransactions = transactions.filter(t => t.asset_id === asset.id)
+    return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
+  }, 0)
+  const totalProfitLoss = totalValue - totalInvested
+  const totalProfitLossPercentage = (totalProfitLoss / totalInvested) * 100
+
+  // Group assets by category
+  const etfs = enrichedAssets.filter(asset => asset.type === 'etf')
+  const crypto = enrichedAssets.filter(asset => asset.type === 'crypto')
+
+  const categories = [
+    {
+      category: "Actions & Fonds",
+      icon: <BarChartIcon className="w-5 h-5" />,
+      total: etfs.reduce((sum, asset) => sum + asset.totalValue, 0),
+      invested: etfs.reduce((sum, asset) => {
+        const assetTransactions = transactions.filter(t => t.asset_id === asset.id)
+        return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
+      }, 0),
+      percentage: (etfs.reduce((sum, asset) => sum + asset.totalValue, 0) / totalValue) * 100 || 0,
+      items: etfs.map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+      })),
+    },
+    {
+      category: "Crypto",
+      icon: <TrendingUpIcon className="w-5 h-5" />,
+      total: crypto.reduce((sum, asset) => sum + asset.totalValue, 0),
+      invested: crypto.reduce((sum, asset) => {
+        const assetTransactions = transactions.filter(t => t.asset_id === asset.id)
+        return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
+      }, 0),
+      percentage: (crypto.reduce((sum, asset) => sum + asset.totalValue, 0) / totalValue) * 100 || 0,
+      items: crypto.map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+      })),
+    },
+  ]
+
+  // Generate dates for the chart from the first transaction to today
+  const firstTransactionDate = new Date(Math.min(...transactions.map(t => new Date(t.transaction_date).getTime())));
+  firstTransactionDate.setHours(0, 0, 0, 0); // Set to midnight
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set to midnight
+  
+  const dates = getDates(firstTransactionDate, today);
+
+  // Prepare chart data
+  const chartData: ChartDataPoint[] = dates.map(date => {
+    const dataPoint: ChartDataPoint = {
+      date: formatDate(date),
+    };
+
+    // Calculate value for each asset at this date
+    enrichedAssets.forEach(asset => {
+      // Get all transactions up to this date for this asset
+      const assetTransactions = transactions.filter(t => {
+        const transactionDate = new Date(t.transaction_date);
+        transactionDate.setHours(0, 0, 0, 0);
+        return t.asset_id === asset.id && transactionDate <= date;
+      });
+      
+      if (assetTransactions.length > 0) {
+        let quantity = 0;
+        assetTransactions.forEach(t => {
+          quantity += t.type === 'buy' ? t.quantity : -t.quantity;
+        });
+        dataPoint[asset.name] = quantity * asset.currentPrice;
+      } else {
+        dataPoint[asset.name] = 0;
+      }
+    });
+
+    return dataPoint;
+  });
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="flex justify-center min-h-screen text-primary bg-background">
+      <main className="flex flex-col w-full max-w-[1440px] mx-auto my-8 px-6">
+        <div className="space-y-12">
+          {/* Portfolio Summary Section */}
+          <div className="space-y-4">
+            <h1 className="text-3xl font-semibold tracking-tight">Mon Portfolio</h1>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="p-8 border border-primary/20 shadow-sm hover:shadow-md transition-all duration-200">
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Patrimoine brut</h2>
+                    <p className="text-4xl font-bold mt-2">
+                      {formatCurrency(totalValue)}
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-8 pt-6 border-t border-primary/10">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Investi</p>
+                      <p className="text-xl font-semibold mt-2">{formatCurrency(totalInvested)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Performance</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {totalProfitLoss >= 0 ? (
+                          <ArrowUpIcon className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <ArrowDownIcon className="w-5 h-5 text-red-500" />
+                        )}
+                        <p className={`text-xl font-semibold ${totalProfitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {formatPercentage(totalProfitLossPercentage)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+              {/* Performance Chart */}
+              <Card className="p-6 border border-primary/20">
+                <h2 className="text-lg font-semibold tracking-tight mb-4">Évolution</h2>
+                <PerformanceChart 
+                  data={chartData}
+                  assets={enrichedAssets.map(asset => ({
+                    id: asset.id,
+                    name: asset.name,
+                  }))}
+                />
+              </Card>
+            </div>
+          </div>
+
+          {/* Assets Section */}
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold tracking-tight">Répartition des actifs</h2>
+            
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {categories.map((category) => (
+                <Card 
+                  key={category.category} 
+                  className="border border-primary/20 shadow-sm hover:shadow-md transition-all duration-200"
+                >
+                  <div className="p-6 space-y-6">
+                    {/* Category Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/5">
+                          {category.icon}
+                        </div>
+                        <h3 className="text-xl font-semibold">{category.category}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-semibold">{formatCurrency(category.total)}</p>
+                        <p className="text-sm font-medium text-muted-foreground">{category.percentage.toFixed(1)}% du total</p>
+                      </div>
+                    </div>
+
+                    {/* Category Performance */}
+                    <div className="grid grid-cols-3 gap-8 pt-4 border-t border-primary/10">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Investi</p>
+                        <p className="text-lg font-semibold mt-2">{formatCurrency(category.invested)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Plus/Moins value</p>
+                        <p className="text-lg font-semibold mt-2">{formatCurrency(category.total - category.invested)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Performance</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          {(category.total - category.invested) >= 0 ? (
+                            <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <ArrowDownIcon className="w-4 h-4 text-red-500" />
+                          )}
+                          <p className={`text-lg font-semibold ${(category.total - category.invested) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {formatPercentage(((category.total - category.invested) / category.invested) * 100)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category Items */}
+                  <div className="border-t border-primary/10">
+                    <div className="grid grid-cols-1 divide-y divide-primary/10">
+                      {category.items.map((item) => (
+                        <div
+                          key={item.name}
+                          className="p-6 hover:bg-muted/50 transition-colors duration-200"
+                        >
+                          <div className="grid grid-cols-4 gap-6">
+                            {/* Asset Identity */}
+                            <div className="col-span-1">
+                              <h4 className="text-base font-semibold">{item.name}</h4>
+                              <p className="text-sm font-medium text-muted-foreground mt-0.5">{item.symbol}</p>
+                              <p className="text-sm font-medium text-muted-foreground mt-2">{item.percentage.toFixed(1)}% du portfolio</p>
+                            </div>
+
+                            {/* Quantity and Value */}
+                            <div className="col-span-1">
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Quantité</p>
+                                  <p className="text-base font-semibold mt-1">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
+                                  <p className="text-base font-semibold mt-1">{formatCurrency(item.value)}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Prices */}
+                            <div className="col-span-1">
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
+                                  <p className="text-base font-semibold mt-1">{formatCurrency(item.currentPrice)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
+                                  <p className="text-base font-semibold mt-1">{formatCurrency(item.averagePrice)}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Performance */}
+                            <div className="col-span-1">
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
+                                  <p className={`text-base font-semibold mt-1 ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {formatCurrency(item.profitLoss)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Performance</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {item.profitLoss >= 0 ? (
+                                      <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                      <ArrowDownIcon className="w-4 h-4 text-red-500" />
+                                    )}
+                                    <p className={`text-base font-semibold ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                      {formatPercentage(item.profitLossPercentage)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
-  );
+  )
 }
