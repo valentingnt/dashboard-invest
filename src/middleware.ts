@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  const isAuthenticated = request.cookies.get('auth')
+  const authCookie = request.cookies.get('auth')
   
   // Allow access to login page and api routes
   if (request.nextUrl.pathname === '/login' || request.nextUrl.pathname.startsWith('/api')) {
@@ -10,11 +10,25 @@ export function middleware(request: NextRequest) {
   }
 
   // Redirect to login if not authenticated
-  if (!isAuthenticated) {
+  if (!authCookie?.value) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  
+  // Ensure cookie is properly set with correct attributes
+  if (authCookie) {
+    response.cookies.set({
+      name: 'auth',
+      value: authCookie.value,
+      path: '/',
+      secure: true,
+      sameSite: 'strict',
+      // Don't set expires to ensure it's a session cookie
+    })
+  }
+
+  return response
 }
 
 export const config = {
