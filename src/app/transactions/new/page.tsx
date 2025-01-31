@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+
 import Link from 'next/link'
 
 export default function NewTransactionPage() {
@@ -28,7 +29,7 @@ export default function NewTransactionPage() {
 
   // Fetch assets on component mount
   useEffect(() => {
-    const fetchAssets = async () => {
+    async function fetchAssets() {
       const { data: assets, error } = await supabase
         .from('assets')
         .select('*')
@@ -51,7 +52,7 @@ export default function NewTransactionPage() {
     fetchAssets()
   }, [toast])
 
-  const validateForm = () => {
+  function validateForm() {
     if (!formData.asset_id) {
       throw new Error('Please select an asset')
     }
@@ -75,7 +76,7 @@ export default function NewTransactionPage() {
     return { quantity, totalAmount, pricePerUnit }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
 

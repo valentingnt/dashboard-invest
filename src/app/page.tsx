@@ -42,6 +42,8 @@ interface ChartDataPoint {
   [key: string]: number | string;
 }
 
+export const revalidate = 0
+
 export default async function DashboardPage() {
   // Fetch assets and transactions from Supabase
   const { data: assets, error: assetsError } = await supabase
