@@ -201,6 +201,9 @@ export default async function DashboardPage() {
             <h1 className="text-3xl font-semibold tracking-tight">Mon Portfolio</h1>
             <div className="flex items-center gap-4">
               <Button variant="outline" asChild>
+                <Link href="/assets/new">Add Asset</Link>
+              </Button>
+              <Button variant="outline" asChild>
                 <Link href="/transactions/new">Add Transaction</Link>
               </Button>
               <ThemeToggle />
