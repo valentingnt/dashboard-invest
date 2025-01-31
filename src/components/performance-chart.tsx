@@ -58,7 +58,7 @@ export function PerformanceChart({ data, assets }: PerformanceChartProps) {
   }, [filteredData, assets]);
 
   const colors = useMemo(() => 
-    assets.map((_, i) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`),
+    assets.map((_, i) => `hsl(${(i * 137.508) % 360}, 45%, 65%)`),
     [assets]
   );
 

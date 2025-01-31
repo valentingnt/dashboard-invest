@@ -131,8 +131,8 @@ export default function NewTransactionPage() {
   }
 
   return (
-    <div className="flex justify-center min-h-screen bg-background">
-      <main className="flex flex-col w-full max-w-[600px] mx-auto my-8 px-6">
+    <div className="flex items-center justify-center min-h-screen bg-background p-6">
+      <main className="w-full max-w-[600px]">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Add Transaction</h1>
           <Button variant="outline" asChild>
