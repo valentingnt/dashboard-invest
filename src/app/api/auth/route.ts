@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { hashPassword } from '@/utils/hash'
 
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD
 
@@ -15,9 +16,11 @@ export async function POST(request: Request) {
   }
 
   if (password === DASHBOARD_PASSWORD) {
-    // Set authentication cookie
+    // Generate a secure hash of the password
+    const hash = await hashPassword(DASHBOARD_PASSWORD)
+
     const cookieStore = await cookies()
-    cookieStore.set('auth', 'true', {
+    cookieStore.set('auth', hash, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

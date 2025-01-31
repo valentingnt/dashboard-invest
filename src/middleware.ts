@@ -1,22 +1,33 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { hashPassword } from './utils/hash'
 
-export function middleware(request: NextRequest) {
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD
+
+export async function middleware(request: NextRequest) {
   const authCookie = request.cookies.get('auth')
   
-  // Allow access to login page and api routes
   if (request.nextUrl.pathname === '/login' || request.nextUrl.pathname.startsWith('/api')) {
     return NextResponse.next()
   }
 
-  // Redirect to login if not authenticated
-  if (!authCookie?.value) {
+  if (!authCookie?.value || !DASHBOARD_PASSWORD) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  try {
+    // Verify the hash from cookie matches the current password
+    const currentHash = await hashPassword(DASHBOARD_PASSWORD)
+    if (authCookie.value !== currentHash) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+  } catch {
+    // If verification fails, redirect to login
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   const response = NextResponse.next()
   
-  // Ensure cookie is properly set with correct attributes
   if (authCookie) {
     response.cookies.set({
       name: 'auth',
@@ -24,7 +35,6 @@ export function middleware(request: NextRequest) {
       path: '/',
       secure: true,
       sameSite: 'strict',
-      // Don't set expires to ensure it's a session cookie
     })
   }
 
