@@ -97,7 +97,18 @@ export default async function DashboardPage() {
         return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
       }, 0),
       percentage: (etfs.reduce((sum, asset) => sum + asset.totalValue, 0) / totalValue) * 100 || 0,
-      items: etfs.map(asset => ({
+      items: etfs.filter(asset => asset.totalQuantity > 0).map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+      })),
+      archivedItems: etfs.filter(asset => asset.totalQuantity === 0).map(asset => ({
         name: asset.name,
         symbol: asset.symbol,
         value: asset.totalValue,
@@ -118,7 +129,18 @@ export default async function DashboardPage() {
         return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
       }, 0),
       percentage: (crypto.reduce((sum, asset) => sum + asset.totalValue, 0) / totalValue) * 100 || 0,
-      items: crypto.map(asset => ({
+      items: crypto.filter(asset => asset.totalQuantity > 0).map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+      })),
+      archivedItems: crypto.filter(asset => asset.totalQuantity === 0).map(asset => ({
         name: asset.name,
         symbol: asset.symbol,
         value: asset.totalValue,
@@ -354,6 +376,90 @@ export default async function DashboardPage() {
                           </div>
                         </div>
                       ))}
+
+                      {/* Archived Assets Section */}
+                      {category.archivedItems.length > 0 && (
+                        <details className="group">
+                          <summary className="p-6 hover:bg-muted/50 transition-colors duration-200 cursor-pointer list-none">
+                            <div className="flex items-center gap-2">
+                              <div className="rotate-0 group-open:rotate-90 transition-transform duration-200">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M6 12L10 8L6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </div>
+                              <h4 className="text-base font-semibold text-muted-foreground">Actifs archivés ({category.archivedItems.length})</h4>
+                            </div>
+                          </summary>
+                          
+                          <div className="divide-y divide-primary/10">
+                            {category.archivedItems.map((item) => (
+                              <div
+                                key={item.name}
+                                className="p-6 hover:bg-muted/50 transition-colors duration-200 bg-muted/30"
+                              >
+                                <div className="grid grid-cols-4 gap-6">
+                                  {/* Asset Identity */}
+                                  <div className="col-span-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="text-base font-semibold text-muted-foreground">{item.name}</h4>
+                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground">Archivé</span>
+                                    </div>
+                                    <p className="text-sm font-medium text-muted-foreground mt-0.5">{item.symbol}</p>
+                                  </div>
+
+                                  {/* Quantity and Value */}
+                                  <div className="col-span-1">
+                                    <div className="space-y-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Quantité</p>
+                                        <p className="text-base font-semibold mt-1 text-muted-foreground">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
+                                        <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.value)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Prices */}
+                                  <div className="col-span-1">
+                                    <div className="space-y-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
+                                        <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.currentPrice)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
+                                        <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.averagePrice)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Performance */}
+                                  <div className="col-span-1">
+                                    <div className="space-y-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
+                                        <p className="text-base font-semibold mt-1 text-muted-foreground">
+                                          {formatCurrency(item.profitLoss)}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Performance</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <p className="text-base font-semibold text-muted-foreground">
+                                            {formatPercentage(item.profitLossPercentage)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   </div>
                 </Card>

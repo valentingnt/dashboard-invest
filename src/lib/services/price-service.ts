@@ -1,18 +1,18 @@
 import { Asset, AssetWithPrice, Transaction } from '../types';
 
-const YAHOO_FINANCE_API = 'https://query1.finance.yahoo.com/v8/finance/chart/';
-const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+const ALPHA_VANTAGE_API = 'https://www.alphavantage.co/query';
+const API_KEY = process.env.NEXT_PUBLIC_ALPHAVANTAGE_API_KEY;
 
-// Cache for prices with a shorter duration since we have 30 calls/minute
+// Cache for prices with a shorter duration since we have limited API calls
 const priceCache = new Map<string, { 
   price: number; 
   timestamp: number;
   change24h?: number; 
 }>();
 
-const CACHE_DURATION = 20 * 1000; // 20 seconds cache for more frequent updates
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache due to API limits
 const API_CALLS = new Map<string, number[]>();
-const MAX_CALLS_PER_MINUTE = 30;
+const MAX_CALLS_PER_MINUTE = 5; // Alpha Vantage free tier limit
 
 function canMakeApiCall(apiKey: string): boolean {
   const now = Date.now();
@@ -60,75 +60,57 @@ async function getCachedPrice(
 }
 
 export async function getAssetPrice(asset: Asset): Promise<number> {
+  if (!API_KEY) {
+    throw new Error('Alpha Vantage API key is not configured');
+  }
+
   try {
-    if (asset.type === 'crypto' && asset.symbol === 'BTC') {
-      const { price } = await getCachedPrice(
-        'BTC',
-        async () => {
+    const { price } = await getCachedPrice(
+      asset.symbol,
+      async () => {
+        // For crypto assets
+        if (asset.type === 'crypto') {
           const response = await fetch(
-            `${COINGECKO_API}/simple/price?ids=bitcoin&vs_currencies=eur&include_24hr_change=true`,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-          
-          if (response.status === 429) {
-            throw new Error('Rate limit exceeded. Please try again in a minute.');
-          }
-
-          if (!response.ok) {
-            throw new Error(`CoinGecko API error: ${response.status}`);
-          }
-
-          const data = await response.json();
-          if (!data?.bitcoin?.eur) {
-            console.error('Unexpected CoinGecko API response:', data);
-            return { price: 0 };
-          }
-
-          return { 
-            price: data.bitcoin.eur,
-            change24h: data.bitcoin.eur_24h_change
-          };
-        },
-        'coingecko'
-      );
-      return price;
-    } else {
-      const { price } = await getCachedPrice(
-        asset.symbol,
-        async () => {
-          const response = await fetch(
-            `${YAHOO_FINANCE_API}${asset.symbol}?interval=1d&range=1d`,
-            {
-              headers: {
-                'Accept': 'application/json',
-              },
-            }
+            `${ALPHA_VANTAGE_API}?function=CURRENCY_EXCHANGE_RATE&from_currency=${asset.symbol}&to_currency=EUR&apikey=${API_KEY}`
           );
 
           if (!response.ok) {
-            throw new Error(`Yahoo Finance API error: ${response.status}`);
+            throw new Error(`Alpha Vantage API error: ${response.status}`);
           }
 
           const data = await response.json();
-          if (!data?.chart?.result?.[0]?.meta?.regularMarketPrice) {
-            console.error('Unexpected Yahoo Finance API response:', data);
+          if (!data['Realtime Currency Exchange Rate']) {
+            console.error('Unexpected Alpha Vantage API response:', data);
             return { price: 0 };
           }
 
-          return { 
-            price: data.chart.result[0].meta.regularMarketPrice,
-            change24h: data.chart.result[0].meta.regularMarketChangePercent
-          };
-        },
-        'yahoo'
-      );
-      return price;
-    }
+          const price = parseFloat(data['Realtime Currency Exchange Rate']['5. Exchange Rate']);
+          return { price };
+        } 
+        // For stocks and ETFs
+        else {
+          const response = await fetch(
+            `${ALPHA_VANTAGE_API}?function=GLOBAL_QUOTE&symbol=${asset.symbol}&apikey=${API_KEY}`
+          );
+
+          if (!response.ok) {
+            throw new Error(`Alpha Vantage API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          if (!data['Global Quote']) {
+            console.error('Unexpected Alpha Vantage API response:', data);
+            return { price: 0 };
+          }
+
+          const price = parseFloat(data['Global Quote']['05. price']);
+          const change24h = parseFloat(data['Global Quote']['10. change percent'].replace('%', ''));
+          return { price, change24h };
+        }
+      },
+      'alphavantage'
+    );
+    return price;
   } catch (error) {
     console.error(`Error fetching price for ${asset.symbol}:`, error);
     return priceCache.get(asset.symbol)?.price || 0;
