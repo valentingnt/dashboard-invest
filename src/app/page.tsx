@@ -221,7 +221,6 @@ export default async function DashboardPage() {
 
               {/* Performance Chart */}
               <Card className="p-6 border border-primary/20">
-                <h2 className="text-lg font-semibold tracking-tight mb-4">Évolution</h2>
                 <PerformanceChart 
                   data={chartData}
                   assets={enrichedAssets.map(asset => ({

@@ -18,10 +18,15 @@ export default function NewTransactionPage() {
   const { toast } = useToast()
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(false)
+  const [dirtyFields, setDirtyFields] = useState({
+    total_amount: false,
+    price_per_unit: false
+  })
   const initialFormState = {
     asset_id: '',
     type: 'buy',
     quantity: '',
+    price_per_unit: '',
     total_amount: '',
     transaction_date: new Date().toISOString().split('T')[0],
   }
@@ -58,19 +63,19 @@ export default function NewTransactionPage() {
     }
 
     const quantity = parseFloat(formData.quantity)
+    const pricePerUnit = parseFloat(formData.price_per_unit)
     const totalAmount = parseFloat(formData.total_amount)
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new Error('Please enter a valid quantity greater than 0')
     }
 
-    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-      throw new Error('Please enter a valid total amount greater than 0')
+    if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
+      throw new Error('Please enter a valid price per unit greater than 0')
     }
 
-    const pricePerUnit = totalAmount / quantity
-    if (!Number.isFinite(pricePerUnit)) {
-      throw new Error('Invalid quantity or total amount')
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      throw new Error('Please enter a valid total amount greater than 0')
     }
 
     return { quantity, totalAmount, pricePerUnit }
@@ -187,7 +192,61 @@ export default function NewTransactionPage() {
                 step="any"
                 min="0"
                 value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                onChange={(e) => {
+                  const newQuantity = e.target.value;
+                  const updates: Partial<typeof formData> = { quantity: newQuantity };
+                  
+                  // Calculate either total amount or price per unit based on which one is not dirty
+                  if (!dirtyFields.total_amount && !dirtyFields.price_per_unit) {
+                    // If neither is dirty, update total amount based on price per unit
+                    const pricePerUnit = parseFloat(formData.price_per_unit);
+                    if (pricePerUnit && newQuantity) {
+                      updates.total_amount = (parseFloat(newQuantity) * pricePerUnit).toString();
+                    }
+                  } else if (!dirtyFields.total_amount && formData.price_per_unit) {
+                    // If only total amount is not dirty, update it
+                    const pricePerUnit = parseFloat(formData.price_per_unit);
+                    if (pricePerUnit && newQuantity) {
+                      updates.total_amount = (parseFloat(newQuantity) * pricePerUnit).toString();
+                    }
+                  } else if (!dirtyFields.price_per_unit && formData.total_amount) {
+                    // If only price per unit is not dirty, update it
+                    const totalAmount = parseFloat(formData.total_amount);
+                    if (totalAmount && newQuantity) {
+                      updates.price_per_unit = (totalAmount / parseFloat(newQuantity)).toString();
+                    }
+                  }
+                  
+                  setFormData({ ...formData, ...updates });
+                }}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="price_per_unit">Price per Unit (€) *</Label>
+              <Input
+                id="price_per_unit"
+                type="number"
+                step="any"
+                min="0"
+                value={formData.price_per_unit}
+                onChange={(e) => {
+                  const newPricePerUnit = e.target.value;
+                  setDirtyFields({ ...dirtyFields, price_per_unit: true });
+                  
+                  const updates: Partial<typeof formData> = { price_per_unit: newPricePerUnit };
+                  
+                  // Only update total amount if it's not dirty
+                  if (!dirtyFields.total_amount && formData.quantity) {
+                    const quantity = parseFloat(formData.quantity);
+                    if (quantity && newPricePerUnit) {
+                      updates.total_amount = (quantity * parseFloat(newPricePerUnit)).toString();
+                    }
+                  }
+                  
+                  setFormData({ ...formData, ...updates });
+                }}
                 required
               />
             </div>
@@ -200,7 +259,22 @@ export default function NewTransactionPage() {
                 step="any"
                 min="0"
                 value={formData.total_amount}
-                onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
+                onChange={(e) => {
+                  const newTotalAmount = e.target.value;
+                  setDirtyFields({ ...dirtyFields, total_amount: true });
+                  
+                  const updates: Partial<typeof formData> = { total_amount: newTotalAmount };
+                  
+                  // Only update price per unit if it's not dirty
+                  if (!dirtyFields.price_per_unit && formData.quantity) {
+                    const quantity = parseFloat(formData.quantity);
+                    if (quantity && newTotalAmount) {
+                      updates.price_per_unit = (parseFloat(newTotalAmount) / quantity).toString();
+                    }
+                  }
+                  
+                  setFormData({ ...formData, ...updates });
+                }}
                 required
               />
             </div>
