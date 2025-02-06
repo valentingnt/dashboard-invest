@@ -9,6 +9,7 @@ import { PerformanceChart } from '@/components/performance-chart'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { Metadata } from "next"
 
 function formatPercentage(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
@@ -35,6 +36,21 @@ function formatDate(date: Date): string {
     month: '2-digit',
     year: 'numeric' 
   });
+}
+
+export const metadata: Metadata = {
+  icons: {
+    icon: [
+      {
+        url: '/favicon-dark.png',
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        url: '/favicon-light.png',
+        media: '(prefers-color-scheme: dark)',
+      },
+    ],
+  }
 }
 
 interface ChartDataPoint {
