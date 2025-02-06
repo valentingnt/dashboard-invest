@@ -1,18 +1,29 @@
 import { Asset, AssetWithPrice, Transaction } from '../types';
 
-const YAHOO_FINANCE_API = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+// Replace Yahoo Finance API with RapidAPI endpoint
+const RAPIDAPI_YAHOO_FINANCE = 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/market/v2/get-quotes';
 const COINGECKO_API = 'https://api.coingecko.com/api/v3';
 
-// Cache for prices with a shorter duration since we have 30 calls/minute
+// Cache for prices with a shorter duration since we have limited API calls
 const priceCache = new Map<string, { 
   price: number; 
   timestamp: number;
-  change24h?: number; 
+  change24h?: number;
+  dayHigh?: number;
+  dayLow?: number;
+  previousClose?: number;
+  volume?: number;
 }>();
 
 const CACHE_DURATION = 20 * 1000; // 20 seconds cache for more frequent updates
 const API_CALLS = new Map<string, number[]>();
 const MAX_CALLS_PER_MINUTE = 30;
+
+// Add your RapidAPI key here
+const RAPIDAPI_KEY = process.env.NEXT_PUBLIC_RAPIDAPI_KEY || '';
+if (!RAPIDAPI_KEY) {
+  throw new Error('RAPIDAPI_KEY environment variable is not set');
+}
 
 function canMakeApiCall(apiKey: string): boolean {
   const now = Date.now();
@@ -29,9 +40,23 @@ function canMakeApiCall(apiKey: string): boolean {
 
 async function getCachedPrice(
   key: string, 
-  fetchFn: () => Promise<{ price: number; change24h?: number }>,
+  fetchFn: () => Promise<{ 
+    price: number; 
+    change24h?: number;
+    dayHigh?: number;
+    dayLow?: number;
+    previousClose?: number;
+    volume?: number;
+  }>,
   apiKey: string
-): Promise<{ price: number; change24h?: number }> {
+): Promise<{ 
+  price: number; 
+  change24h?: number;
+  dayHigh?: number;
+  dayLow?: number;
+  previousClose?: number;
+  volume?: number;
+}> {
   const now = Date.now();
   const cached = priceCache.get(key);
 
@@ -98,31 +123,47 @@ export async function getAssetPrice(asset: Asset): Promise<number> {
       );
       return price;
     } else {
+      // Handle different stock exchange suffixes
+      const symbol = asset.symbol.includes('.') ? asset.symbol : `${asset.symbol}.PA`;
+      
       const { price } = await getCachedPrice(
-        asset.symbol,
+        symbol,
         async () => {
+          // Use RapidAPI Yahoo Finance endpoint
           const response = await fetch(
-            `${YAHOO_FINANCE_API}${asset.symbol}?interval=1d&range=1d`,
+            `${RAPIDAPI_YAHOO_FINANCE}?region=FR&symbols=${symbol}`,
             {
+              method: 'GET',
               headers: {
-                'Accept': 'application/json',
+                'x-rapidapi-key': RAPIDAPI_KEY,
+                'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
               },
             }
           );
 
+          if (response.status === 429) {
+            throw new Error('RapidAPI rate limit exceeded. Please try again later.');
+          }
+
           if (!response.ok) {
-            throw new Error(`Yahoo Finance API error: ${response.status}`);
+            throw new Error(`RapidAPI Yahoo Finance error: ${response.status}`);
           }
 
           const data = await response.json();
-          if (!data?.chart?.result?.[0]?.meta?.regularMarketPrice) {
-            console.error('Unexpected Yahoo Finance API response:', data);
+          const result = data?.quoteResponse?.result?.[0];
+          
+          if (!result?.regularMarketPrice) {
+            console.error('Unexpected RapidAPI Yahoo Finance response for symbol', symbol, ':', JSON.stringify(data, null, 2));
             return { price: 0 };
           }
 
           return { 
-            price: data.chart.result[0].meta.regularMarketPrice,
-            change24h: data.chart.result[0].meta.regularMarketChangePercent
+            price: result.regularMarketPrice,
+            change24h: result.regularMarketChangePercent,
+            dayHigh: result.regularMarketDayHigh,
+            dayLow: result.regularMarketDayLow,
+            previousClose: result.regularMarketPreviousClose,
+            volume: result.regularMarketVolume
           };
         },
         'yahoo'
@@ -139,7 +180,67 @@ export async function enrichAssetWithPriceAndTransactions(
   asset: Asset,
   transactions: Transaction[]
 ): Promise<AssetWithPrice> {
-  const currentPrice = await getAssetPrice(asset);
+  // Get price and market data
+  const priceData = await getCachedPrice(
+    asset.symbol,
+    async () => {
+      if (asset.type === 'crypto' && asset.symbol === 'BTC') {
+        const response = await fetch(
+          `${COINGECKO_API}/simple/price?ids=bitcoin&vs_currencies=eur&include_24hr_change=true`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`CoinGecko API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return {
+          price: data.bitcoin.eur,
+          change24h: data.bitcoin.eur_24h_change
+        };
+      } else {
+        const symbol = asset.symbol.includes('.') ? asset.symbol : `${asset.symbol}.PA`;
+        const response = await fetch(
+          `${RAPIDAPI_YAHOO_FINANCE}?region=FR&symbols=${symbol}`,
+          {
+            method: 'GET',
+            headers: {
+              'x-rapidapi-key': RAPIDAPI_KEY,
+              'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`RapidAPI Yahoo Finance error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const result = data?.quoteResponse?.result?.[0];
+        
+        if (!result?.regularMarketPrice) {
+          console.error('Unexpected RapidAPI Yahoo Finance response for symbol', symbol, ':', JSON.stringify(data, null, 2));
+          return { price: 0 };
+        }
+        
+        return {
+          price: result.regularMarketPrice,
+          change24h: result.regularMarketChangePercent,
+          dayHigh: result.regularMarketDayHigh,
+          dayLow: result.regularMarketDayLow,
+          previousClose: result.regularMarketPreviousClose,
+          volume: result.regularMarketVolume
+        };
+      }
+    },
+    asset.type === 'crypto' ? 'coingecko' : 'yahoo'
+  );
   
   // Calculate totals from transactions
   const assetTransactions = transactions.filter(t => t.asset_id === asset.id);
@@ -156,18 +257,23 @@ export async function enrichAssetWithPriceAndTransactions(
     }
   });
 
-  const totalValue = totalQuantity * currentPrice;
+  const totalValue = totalQuantity * priceData.price;
   const averagePrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
   const profitLoss = totalValue - totalCost;
   const profitLossPercentage = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
 
   return {
     ...asset,
-    currentPrice,
+    currentPrice: priceData.price,
     totalValue,
     totalQuantity,
     averagePrice,
     profitLoss,
     profitLossPercentage,
+    dayHigh: priceData.dayHigh,
+    dayLow: priceData.dayLow,
+    previousClose: priceData.previousClose,
+    volume: priceData.volume,
+    change24h: priceData.change24h,
   };
 } 

@@ -2,9 +2,9 @@ export type AssetType = 'etf' | 'crypto';
 
 export interface Asset {
   id: string;
-  symbol: string;
   name: string;
-  type: AssetType;
+  symbol: string;
+  type: 'etf' | 'crypto';
   created_at: string;
   updated_at: string;
 }
@@ -14,7 +14,7 @@ export interface Transaction {
   asset_id: string;
   type: 'buy' | 'sell';
   quantity: number;
-  price_per_unit: number;
+  price: number;
   total_amount: number;
   transaction_date: string;
   created_at: string;
@@ -28,4 +28,9 @@ export interface AssetWithPrice extends Asset {
   averagePrice: number;
   profitLoss: number;
   profitLossPercentage: number;
+  dayHigh?: number;
+  dayLow?: number;
+  previousClose?: number;
+  volume?: number;
+  change24h?: number;
 } 

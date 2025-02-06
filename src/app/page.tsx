@@ -60,6 +60,33 @@ interface ChartDataPoint {
 
 export const revalidate = 0
 
+interface CategoryItem {
+  name: string;
+  symbol: string;
+  value: number;
+  quantity: number;
+  currentPrice: number;
+  averagePrice: number;
+  percentage: number;
+  profitLoss: number;
+  profitLossPercentage: number;
+  dayHigh?: number;
+  dayLow?: number;
+  previousClose?: number;
+  volume?: number;
+  change24h?: number;
+}
+
+interface Category {
+  category: string;
+  icon: React.ReactNode;
+  total: number;
+  invested: number;
+  percentage: number;
+  items: CategoryItem[];
+  archivedItems: CategoryItem[];
+}
+
 export default async function DashboardPage() {
   // Fetch assets and transactions from Supabase
   const { data: assets, error: assetsError } = await supabase
@@ -103,7 +130,7 @@ export default async function DashboardPage() {
   const etfs = enrichedAssets.filter(asset => asset.type === 'etf')
   const crypto = enrichedAssets.filter(asset => asset.type === 'crypto')
 
-  const categories = [
+  const categories: Category[] = [
     {
       category: "Actions & Fonds",
       icon: <BarChartIcon className="w-5 h-5" />,
