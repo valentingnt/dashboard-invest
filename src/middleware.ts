@@ -33,8 +33,10 @@ export async function middleware(request: NextRequest) {
       name: 'auth',
       value: authCookie.value,
       path: '/',
-      secure: true,
-      sameSite: 'strict',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 // 7 days
     })
   }
 
