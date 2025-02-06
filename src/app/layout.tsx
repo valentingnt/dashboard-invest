@@ -9,8 +9,20 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Dashboard Invest',
-  description: 'Track your investments',
+  title: 'Dashboard - Valentin Genest',
+  description: 'Track my investments',
+  icons: {
+    icon: [
+      {
+        url: '/favicon-dark.png',
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        url: '/favicon-light.png',
+        media: '(prefers-color-scheme: dark)',
+      },
+    ],
+  }
 }
 
 export default function RootLayout({
