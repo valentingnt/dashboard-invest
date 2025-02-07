@@ -45,4 +45,23 @@ export interface AssetWithPrice extends Asset {
   change24h?: number;
   accruedInterest?: number;  // For savings accounts: total interest earned since first deposit
   interest_rate?: number | null;  // Current interest rate for savings accounts
+}
+
+export interface CategoryItem {
+  name: string;
+  symbol: string;
+  value: number;
+  quantity: number;
+  currentPrice: number;
+  averagePrice: number;
+  percentage: number;
+  profitLoss: number;
+  profitLossPercentage: number;
+  dayHigh?: number;
+  dayLow?: number;
+  previousClose?: number;
+  volume?: number;
+  change24h?: number;
+  interest_rate?: number;
+  accruedInterest?: number;
 } 

@@ -1,19 +1,13 @@
 import { Card } from "@/components/ui/card"
-import { formatCurrency } from "@/lib/utils"
 import { Asset, Transaction, AssetWithPrice } from '@/lib/types'
 import { enrichAssetWithPriceAndTransactions } from '@/lib/services/price-service'
 import { supabase } from '@/lib/supabase/client'
 import { PostgrestError } from '@supabase/supabase-js'
-import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, BarChartIcon, PiggyBankIcon } from 'lucide-react'
+import { TrendingUpIcon, BarChartIcon, PiggyBankIcon } from 'lucide-react'
 import { PerformanceChart } from '@/components/performance-chart'
-import { ThemeToggle } from '@/components/theme-toggle'
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Metadata } from "next"
-
-function formatPercentage(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
-}
+import { DashboardHeader } from '@/components/dashboard/header'
+import { PortfolioSummary } from '@/components/dashboard/portfolio-summary'
+import { AssetCategory } from '@/components/dashboard/asset-category'
 
 // Function to generate dates between start and end
 function getDates(startDate: Date, endDate: Date) {
@@ -38,56 +32,12 @@ function formatDate(date: Date): string {
   });
 }
 
-export const metadata: Metadata = {
-  icons: {
-    icon: [
-      {
-        url: '/favicon-dark.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/favicon-light.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-    ],
-  }
-}
-
 interface ChartDataPoint {
   date: string;
   [key: string]: number | string;
 }
 
 export const revalidate = 0
-
-interface CategoryItem {
-  name: string;
-  symbol: string;
-  value: number;
-  quantity: number;
-  currentPrice: number;
-  averagePrice: number;
-  percentage: number;
-  profitLoss: number;
-  profitLossPercentage: number;
-  dayHigh?: number;
-  dayLow?: number;
-  previousClose?: number;
-  volume?: number;
-  change24h?: number;
-  interest_rate?: number;
-  accruedInterest?: number;
-}
-
-interface Category {
-  category: string;
-  icon: React.ReactNode;
-  total: number;
-  invested: number;
-  percentage: number;
-  items: CategoryItem[];
-  archivedItems: CategoryItem[];
-}
 
 export default async function DashboardPage() {
   // Fetch assets and transactions from Supabase
@@ -133,7 +83,7 @@ export default async function DashboardPage() {
   const crypto = enrichedAssets.filter(asset => asset.type === 'crypto')
   const savings = enrichedAssets.filter(asset => asset.type === 'savings')
 
-  const categories: Category[] = [
+  const categories = [
     {
       category: "Actions & Fonds",
       icon: <BarChartIcon className="w-5 h-5" />,
@@ -277,55 +227,14 @@ export default async function DashboardPage() {
     <div className="flex justify-center min-h-screen text-primary bg-background">
       <main className="flex flex-col w-full max-w-[1440px] mx-auto my-4 sm:my-8 px-4 sm:px-6">
         <div className="space-y-8 sm:space-y-12">
-          {/* Header with Theme Toggle */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Mon Portfolio</h1>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <Button variant="outline" asChild className="flex-1 sm:flex-none">
-                <Link href="/assets/new">Add Asset</Link>
-              </Button>
-              <Button variant="outline" asChild className="flex-1 sm:flex-none">
-                <Link href="/transactions/new">Add Transaction</Link>
-              </Button>
-              <ThemeToggle />
-            </div>
-          </div>
+          <DashboardHeader />
 
-          {/* Portfolio Summary Section */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              <Card className="p-6 sm:p-8 border border-primary/20 shadow-sm hover:shadow-md transition-all duration-200">
-                <div className="space-y-6 sm:space-y-8">
-                  <div>
-                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Patrimoine brut</h2>
-                    <p className="text-3xl sm:text-4xl font-bold mt-2">
-                      {formatCurrency(totalValue)}
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 sm:gap-8 pt-4 sm:pt-6 border-t border-primary/10">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Investi</p>
-                      <p className="text-lg sm:text-xl font-semibold mt-2">{formatCurrency(totalInvested)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Performance</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        {totalProfitLoss >= 0 ? (
-                          <ArrowUpIcon className="w-4 sm:w-5 h-4 sm:h-5 text-green-500" />
-                        ) : (
-                          <ArrowDownIcon className="w-4 sm:w-5 h-4 sm:h-5 text-red-500" />
-                        )}
-                        <p className={`text-lg sm:text-xl font-semibold ${totalProfitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {formatPercentage(totalProfitLossPercentage)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </div>
+          <PortfolioSummary
+            totalValue={totalValue}
+            totalInvested={totalInvested}
+            totalProfitLoss={totalProfitLoss}
+            totalProfitLossPercentage={totalProfitLossPercentage}
+          />
 
           {/* Assets Section */}
           <div className="space-y-4 sm:space-y-6">
@@ -333,245 +242,10 @@ export default async function DashboardPage() {
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               {categories.map((category) => (
-                <Card 
-                  key={category.category} 
-                  className="border border-primary/20 shadow-sm hover:shadow-md transition-all duration-200"
-                >
-                  <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-                    {/* Category Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/5">
-                          {category.icon}
-                        </div>
-                        <h3 className="text-lg sm:text-xl font-semibold">{category.category}</h3>
-                      </div>
-                      <div className="text-left sm:text-right">
-                        <p className="text-lg sm:text-xl font-semibold">{formatCurrency(category.total)}</p>
-                        <p className="text-sm font-medium text-muted-foreground">{category.percentage.toFixed(1)}% du total</p>
-                      </div>
-                    </div>
-
-                    {/* Category Performance */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-8 pt-4 border-t border-primary/10">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Investi</p>
-                        <p className="text-base sm:text-lg font-semibold mt-2">{formatCurrency(category.invested)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Plus/Moins value</p>
-                        <p className="text-base sm:text-lg font-semibold mt-2">{formatCurrency(category.total - category.invested)}</p>
-                      </div>
-                      <div className="col-span-2 sm:col-span-1">
-                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Performance</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          {(category.total - category.invested) >= 0 ? (
-                            <ArrowUpIcon className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <ArrowDownIcon className="w-4 h-4 text-red-500" />
-                          )}
-                          <p className={`text-base sm:text-lg font-semibold ${(category.total - category.invested) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {formatPercentage(((category.total - category.invested) / category.invested) * 100)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Category Items */}
-                  <div className="border-t border-primary/10">
-                    <div className="grid grid-cols-1 divide-y divide-primary/10">
-                      {category.items.map((item) => (
-                        <div
-                          key={item.name}
-                          className="p-4 sm:p-6 hover:bg-muted/50 transition-colors duration-200"
-                        >
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-6">
-                            {/* Asset Identity */}
-                            <div className="col-span-1">
-                              <div className="flex items-center justify-between sm:block">
-                                <div>
-                                  <h4 className="text-base font-semibold">{item.name}</h4>
-                                  <p className="text-sm font-medium text-muted-foreground mt-0.5">{item.symbol}</p>
-                                  {item.interest_rate && (
-                                    <p className="text-sm font-medium text-green-500 mt-1">
-                                      Taux : {item.interest_rate}%
-                                    </p>
-                                  )}
-                                </div>
-                                <p className="text-sm font-medium text-muted-foreground sm:mt-2">{item.percentage.toFixed(1)}% du portfolio</p>
-                              </div>
-                            </div>
-
-                            {category.category === "Épargne" ? (
-                              <>
-                                {/* Special display for savings accounts */}
-                                <div className="col-span-2">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Solde actuel</p>
-                                      <p className="text-base font-semibold mt-1">{formatCurrency(item.quantity)}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Intérêts cumulés</p>
-                                      <p className="text-base font-semibold text-green-500 mt-1">
-                                        {formatCurrency(item.accruedInterest || 0)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-span-1">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Intérêts mensuels projetés</p>
-                                      <p className="text-base font-semibold text-green-500 mt-1">
-                                        {formatCurrency((item.quantity * (item.interest_rate || 0)) / 1200)}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Rendement</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <ArrowUpIcon className="w-4 h-4 text-green-500" />
-                                        <p className="text-base font-semibold text-green-500">
-                                          {item.interest_rate}% par an
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                {/* Original display for ETFs and Crypto */}
-                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                  <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Quantité</p>
-                                    <p className="text-base font-semibold mt-1">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
-                                  </div>
-                                  <div className="sm:mt-3">
-                                    <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
-                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.value)}</p>
-                                  </div>
-                                </div>
-
-                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                  <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
-                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.currentPrice)}</p>
-                                  </div>
-                                  <div className="sm:mt-3">
-                                    <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
-                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.averagePrice)}</p>
-                                  </div>
-                                </div>
-
-                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                  <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
-                                    <p className={`text-base font-semibold mt-1 ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                      {formatCurrency(item.profitLoss)}
-                                    </p>
-                                  </div>
-                                  <div className="sm:mt-3">
-                                    <p className="text-sm font-medium text-muted-foreground">Performance</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      {item.profitLoss >= 0 ? (
-                                        <ArrowUpIcon className="w-4 h-4 text-green-500" />
-                                      ) : (
-                                        <ArrowDownIcon className="w-4 h-4 text-red-500" />
-                                      )}
-                                      <p className={`text-base font-semibold ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                        {formatPercentage(item.profitLossPercentage)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Archived Assets Section - Mobile Optimized */}
-                      {category.archivedItems.length > 0 && (
-                        <details className="group">
-                          <summary className="p-4 sm:p-6 hover:bg-muted/50 transition-colors duration-200 cursor-pointer list-none">
-                            <div className="flex items-center gap-2">
-                              <div className="rotate-0 group-open:rotate-90 transition-transform duration-200">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M6 12L10 8L6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </div>
-                              <h4 className="text-base font-semibold text-muted-foreground">Actifs archivés ({category.archivedItems.length})</h4>
-                            </div>
-                          </summary>
-                          
-                          <div className="divide-y divide-primary/10">
-                            {category.archivedItems.map((item) => (
-                              <div
-                                key={item.name}
-                                className="p-4 sm:p-6 hover:bg-muted/50 transition-colors duration-200 bg-muted/30"
-                              >
-                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-6">
-                                  {/* Asset Identity */}
-                                  <div className="col-span-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <h4 className="text-base font-semibold text-muted-foreground">{item.name}</h4>
-                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground">Archivé</span>
-                                    </div>
-                                    <p className="text-sm font-medium text-muted-foreground mt-0.5">{item.symbol}</p>
-                                  </div>
-
-                                  {/* Quantity and Value */}
-                                  <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Quantité</p>
-                                      <p className="text-base font-semibold mt-1 text-muted-foreground">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
-                                    </div>
-                                    <div className="sm:mt-3">
-                                      <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
-                                      <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.value)}</p>
-                                    </div>
-                                  </div>
-
-                                  {/* Prices */}
-                                  <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
-                                      <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.currentPrice)}</p>
-                                    </div>
-                                    <div className="sm:mt-3">
-                                      <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
-                                      <p className="text-base font-semibold mt-1 text-muted-foreground">{formatCurrency(item.averagePrice)}</p>
-                                    </div>
-                                  </div>
-
-                                  {/* Performance */}
-                                  <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
-                                      <p className="text-base font-semibold mt-1 text-muted-foreground">
-                                        {formatCurrency(item.profitLoss)}
-                                      </p>
-                                    </div>
-                                    <div className="sm:mt-3">
-                                      <p className="text-sm font-medium text-muted-foreground">Performance</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <p className="text-base font-semibold text-muted-foreground">
-                                          {formatPercentage(item.profitLossPercentage)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  </div>
-                </Card>
+                <AssetCategory
+                  key={category.category}
+                  {...category}
+                />
               ))}
             </div>
           </div>
