@@ -57,6 +57,7 @@ export default function NewAssetPage() {
     name: '',
     isin: '',
     type: 'etf',
+    interest_rate: '',
   }
   const [formData, setFormData] = useState(initialFormState)
 
@@ -122,6 +123,11 @@ export default function NewAssetPage() {
         throw new Error('Please fill in all required fields')
       }
 
+      // Validate interest rate for savings accounts
+      if (formData.type === 'savings' && (!formData.interest_rate || parseFloat(formData.interest_rate) <= 0)) {
+        throw new Error('Please enter a valid interest rate for savings account')
+      }
+
       const { error } = await supabase
         .from('assets')
         .insert([{
@@ -129,6 +135,7 @@ export default function NewAssetPage() {
           name: formData.name,
           isin: formData.isin || null, // Make ISIN optional
           type: formData.type,
+          interest_rate: formData.type === 'savings' ? parseFloat(formData.interest_rate) : null,
         }])
 
       if (error) {
@@ -265,9 +272,26 @@ export default function NewAssetPage() {
                 <SelectContent>
                   <SelectItem value="etf">ETF</SelectItem>
                   <SelectItem value="crypto">Crypto</SelectItem>
+                  <SelectItem value="savings">Savings Account</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {formData.type === 'savings' && (
+              <div className="space-y-2">
+                <Label htmlFor="interest_rate">Interest Rate (%) *</Label>
+                <Input
+                  id="interest_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.interest_rate}
+                  onChange={(e) => setFormData({ ...formData, interest_rate: e.target.value })}
+                  required
+                />
+              </div>
+            )}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Adding Asset...' : 'Add Asset'}

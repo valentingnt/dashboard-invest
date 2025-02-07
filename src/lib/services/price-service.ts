@@ -1,4 +1,5 @@
-import { Asset, AssetWithPrice, Transaction } from '../types';
+import { Asset, AssetWithPrice, Transaction, InterestRateHistory } from '@/lib/types';
+import { supabase } from '@/lib/supabase/client';
 
 // Replace Yahoo Finance API with RapidAPI endpoint
 const RAPIDAPI_YAHOO_FINANCE = 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/market/v2/get-quotes';
@@ -86,6 +87,13 @@ async function getCachedPrice(
 
 export async function getAssetPrice(asset: Asset): Promise<number> {
   try {
+    // Handle savings accounts
+    if (asset.type === 'savings') {
+      // For savings accounts, we return 1 as the price since the total value
+      // will be managed through the quantity field
+      return 1;
+    }
+
     if (asset.type === 'crypto' && asset.symbol === 'BTC') {
       const { price } = await getCachedPrice(
         'BTC',
@@ -180,11 +188,41 @@ export async function enrichAssetWithPriceAndTransactions(
   asset: Asset,
   transactions: Transaction[]
 ): Promise<AssetWithPrice> {
+  // Get interest rate history for savings accounts
+  let interestRateHistory: InterestRateHistory[] = [];
+  let currentInterestRate: number | null = null;
+  
+  if (asset.type === 'savings') {
+    // Get all rates for calculations
+    const { data: rates } = await supabase
+      .from('interest_rate_history')
+      .select('*')
+      .eq('asset_id', asset.id)
+      .order('start_date', { ascending: true });
+    
+    if (rates) {
+      interestRateHistory = rates;
+    }
+
+    // Get current rate using the function
+    const { data: currentRate } = await supabase
+      .rpc('get_current_interest_rate', { 
+        asset_uuid: asset.id 
+      });
+    
+    currentInterestRate = currentRate || null;
+  }
+
   // Get price and market data
   const priceData = await getCachedPrice(
     asset.symbol,
     async () => {
-      if (asset.type === 'crypto' && asset.symbol === 'BTC') {
+      if (asset.type === 'savings') {
+        return {
+          price: 1,
+          change24h: 0
+        };
+      } else if (asset.type === 'crypto' && asset.symbol === 'BTC') {
         const response = await fetch(
           `${COINGECKO_API}/simple/price?ids=bitcoin&vs_currencies=eur&include_24hr_change=true`,
           {
@@ -243,24 +281,127 @@ export async function enrichAssetWithPriceAndTransactions(
   );
   
   // Calculate totals from transactions
-  const assetTransactions = transactions.filter(t => t.asset_id === asset.id);
+  const assetTransactions = transactions
+    .filter(t => t.asset_id === asset.id)
+    .sort((a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+
   let totalQuantity = 0;
   let totalCost = 0;
+  let accruedInterest = 0;
 
-  assetTransactions.forEach(transaction => {
-    if (transaction.type === 'buy') {
-      totalQuantity += transaction.quantity;
-      totalCost += transaction.total_amount;
-    } else {
-      totalQuantity -= transaction.quantity;
-      totalCost -= transaction.total_amount;
+  if (asset.type === 'savings') {
+    // For savings accounts, calculate interest based on daily balances and rate periods
+    let currentBalance = 0;
+    let lastTransactionDate = new Date(0); // Start from epoch
+    let currentRateIndex = 0;
+
+    assetTransactions.forEach(transaction => {
+      const transactionDate = new Date(transaction.transaction_date);
+      
+      // Calculate interest for the period between last transaction and this one
+      if (currentBalance > 0) {
+        // Split the period into rate periods if necessary
+        let periodStartDate = new Date(lastTransactionDate);
+        const periodEndDate = new Date(transactionDate);
+
+        while (periodStartDate < periodEndDate) {
+          // Find applicable rate for this period
+          while (currentRateIndex < interestRateHistory.length - 1 && 
+                 new Date(interestRateHistory[currentRateIndex].end_date!) <= periodStartDate) {
+            currentRateIndex++;
+          }
+          
+          const currentRate = interestRateHistory[currentRateIndex];
+          if (!currentRate) continue;
+
+          // Calculate end of rate period or transaction date, whichever comes first
+          const rateEndDate = currentRate.end_date ? new Date(currentRate.end_date) : new Date(8640000000000000);
+          const periodEnd = new Date(Math.min(
+            periodEndDate.getTime(),
+            rateEndDate.getTime()
+          ));
+
+          // Calculate interest for this rate period
+          const daysBetween = (periodEnd.getTime() - periodStartDate.getTime()) / (1000 * 60 * 60 * 24);
+          const dailyRate = (currentRate.rate / 100) / 365;
+          const periodInterest = currentBalance * dailyRate * daysBetween;
+          accruedInterest += periodInterest;
+
+          // Move to next period
+          periodStartDate = periodEnd;
+        }
+      }
+
+      // Update balance
+      if (transaction.type === 'buy') {
+        currentBalance += transaction.quantity;
+      } else {
+        currentBalance -= transaction.quantity;
+      }
+      
+      lastTransactionDate = transactionDate;
+    });
+
+    // Calculate interest up to today for the current balance
+    const today = new Date();
+    if (currentBalance > 0 && lastTransactionDate < today) {
+      let periodStartDate = new Date(lastTransactionDate);
+      
+      while (periodStartDate < today) {
+        // Find applicable rate
+        while (currentRateIndex < interestRateHistory.length - 1 && 
+               new Date(interestRateHistory[currentRateIndex].end_date!) <= periodStartDate) {
+          currentRateIndex++;
+        }
+        
+        const currentRate = interestRateHistory[currentRateIndex];
+        if (!currentRate) break;
+
+        // Calculate end of rate period or today, whichever comes first
+        const rateEndDate = currentRate.end_date ? new Date(currentRate.end_date) : today;
+        const periodEnd = new Date(Math.min(today.getTime(), rateEndDate.getTime()));
+
+        // Calculate interest for this period
+        const daysBetween = (periodEnd.getTime() - periodStartDate.getTime()) / (1000 * 60 * 60 * 24);
+        const dailyRate = (currentRate.rate / 100) / 365;
+        const periodInterest = currentBalance * dailyRate * daysBetween;
+        accruedInterest += periodInterest;
+
+        // Move to next period
+        periodStartDate = periodEnd;
+      }
     }
-  });
+
+    totalQuantity = currentBalance;
+    totalCost = assetTransactions.reduce((sum, t) => 
+      sum + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0);
+  } else {
+    // Regular calculation for non-savings assets
+    assetTransactions.forEach(transaction => {
+      if (transaction.type === 'buy') {
+        totalQuantity += transaction.quantity;
+        totalCost += transaction.total_amount;
+      } else {
+        totalQuantity -= transaction.quantity;
+        totalCost -= transaction.total_amount;
+      }
+    });
+  }
 
   const totalValue = totalQuantity * priceData.price;
   const averagePrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-  const profitLoss = totalValue - totalCost;
-  const profitLossPercentage = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
+
+  // For savings accounts, profit is the accrued interest
+  let profitLoss = 0;
+  let profitLossPercentage = 0;
+
+  if (asset.type === 'savings') {
+    profitLoss = accruedInterest;
+    profitLossPercentage = totalCost > 0 ? (accruedInterest / totalCost) * 100 : 0;
+  } else {
+    profitLoss = totalValue - totalCost;
+    profitLossPercentage = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
+  }
 
   return {
     ...asset,
@@ -275,5 +416,7 @@ export async function enrichAssetWithPriceAndTransactions(
     previousClose: priceData.previousClose,
     volume: priceData.volume,
     change24h: priceData.change24h,
+    accruedInterest: asset.type === 'savings' ? accruedInterest : undefined,
+    interest_rate: currentInterestRate,
   };
 } 

@@ -1,10 +1,20 @@
-export type AssetType = 'etf' | 'crypto';
+export type AssetType = 'etf' | 'crypto' | 'savings';
+
+export interface InterestRateHistory {
+  id: string;
+  asset_id: string;
+  rate: number;
+  start_date: string;
+  end_date?: string;  // null means current/ongoing rate
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Asset {
   id: string;
   name: string;
   symbol: string;
-  type: 'etf' | 'crypto';
+  type: AssetType;
   created_at: string;
   updated_at: string;
 }
@@ -33,4 +43,6 @@ export interface AssetWithPrice extends Asset {
   previousClose?: number;
   volume?: number;
   change24h?: number;
+  accruedInterest?: number;  // For savings accounts: total interest earned since first deposit
+  interest_rate?: number | null;  // Current interest rate for savings accounts
 } 

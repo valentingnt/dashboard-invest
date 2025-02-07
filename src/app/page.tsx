@@ -4,7 +4,7 @@ import { Asset, Transaction, AssetWithPrice } from '@/lib/types'
 import { enrichAssetWithPriceAndTransactions } from '@/lib/services/price-service'
 import { supabase } from '@/lib/supabase/client'
 import { PostgrestError } from '@supabase/supabase-js'
-import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, BarChartIcon } from 'lucide-react'
+import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, BarChartIcon, PiggyBankIcon } from 'lucide-react'
 import { PerformanceChart } from '@/components/performance-chart'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from "@/components/ui/button"
@@ -75,6 +75,8 @@ interface CategoryItem {
   previousClose?: number;
   volume?: number;
   change24h?: number;
+  interest_rate?: number;
+  accruedInterest?: number;
 }
 
 interface Category {
@@ -129,6 +131,7 @@ export default async function DashboardPage() {
   // Group assets by category
   const etfs = enrichedAssets.filter(asset => asset.type === 'etf')
   const crypto = enrichedAssets.filter(asset => asset.type === 'crypto')
+  const savings = enrichedAssets.filter(asset => asset.type === 'savings')
 
   const categories: Category[] = [
     {
@@ -193,6 +196,41 @@ export default async function DashboardPage() {
         percentage: (asset.totalValue / totalValue) * 100 || 0,
         profitLoss: asset.profitLoss,
         profitLossPercentage: asset.profitLossPercentage,
+      })),
+    },
+    {
+      category: "Épargne",
+      icon: <PiggyBankIcon className="w-5 h-5" />,
+      total: savings.reduce((sum, asset) => sum + asset.totalValue, 0),
+      invested: savings.reduce((sum, asset) => {
+        const assetTransactions = transactions.filter(t => t.asset_id === asset.id)
+        return sum + assetTransactions.reduce((total, t) => total + (t.type === 'buy' ? t.total_amount : -t.total_amount), 0)
+      }, 0),
+      percentage: (savings.reduce((sum, asset) => sum + asset.totalValue, 0) / totalValue) * 100 || 0,
+      items: savings.filter(asset => asset.totalQuantity > 0).map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+        interest_rate: asset.interest_rate,
+        accruedInterest: asset.accruedInterest,
+      })),
+      archivedItems: savings.filter(asset => asset.totalQuantity === 0).map(asset => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        value: asset.totalValue,
+        quantity: asset.totalQuantity,
+        currentPrice: asset.currentPrice,
+        averagePrice: asset.averagePrice,
+        percentage: (asset.totalValue / totalValue) * 100 || 0,
+        profitLoss: asset.profitLoss,
+        profitLossPercentage: asset.profitLossPercentage,
+        interest_rate: asset.interest_rate,
       })),
     },
   ]
@@ -355,57 +393,101 @@ export default async function DashboardPage() {
                                 <div>
                                   <h4 className="text-base font-semibold">{item.name}</h4>
                                   <p className="text-sm font-medium text-muted-foreground mt-0.5">{item.symbol}</p>
+                                  {item.interest_rate && (
+                                    <p className="text-sm font-medium text-green-500 mt-1">
+                                      Taux : {item.interest_rate}%
+                                    </p>
+                                  )}
                                 </div>
                                 <p className="text-sm font-medium text-muted-foreground sm:mt-2">{item.percentage.toFixed(1)}% du portfolio</p>
                               </div>
                             </div>
 
-                            {/* Quantity and Value */}
-                            <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-muted-foreground">Quantité</p>
-                                <p className="text-base font-semibold mt-1">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
-                              </div>
-                              <div className="sm:mt-3">
-                                <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
-                                <p className="text-base font-semibold mt-1">{formatCurrency(item.value)}</p>
-                              </div>
-                            </div>
-
-                            {/* Prices */}
-                            <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
-                                <p className="text-base font-semibold mt-1">{formatCurrency(item.currentPrice)}</p>
-                              </div>
-                              <div className="sm:mt-3">
-                                <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
-                                <p className="text-base font-semibold mt-1">{formatCurrency(item.averagePrice)}</p>
-                              </div>
-                            </div>
-
-                            {/* Performance */}
-                            <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
-                                <p className={`text-base font-semibold mt-1 ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                  {formatCurrency(item.profitLoss)}
-                                </p>
-                              </div>
-                              <div className="sm:mt-3">
-                                <p className="text-sm font-medium text-muted-foreground">Performance</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  {item.profitLoss >= 0 ? (
-                                    <ArrowUpIcon className="w-4 h-4 text-green-500" />
-                                  ) : (
-                                    <ArrowDownIcon className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <p className={`text-base font-semibold ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                    {formatPercentage(item.profitLossPercentage)}
-                                  </p>
+                            {category.category === "Épargne" ? (
+                              <>
+                                {/* Special display for savings accounts */}
+                                <div className="col-span-2">
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Solde actuel</p>
+                                      <p className="text-base font-semibold mt-1">{formatCurrency(item.quantity)}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Intérêts cumulés</p>
+                                      <p className="text-base font-semibold text-green-500 mt-1">
+                                        {formatCurrency(item.accruedInterest || 0)}
+                                      </p>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
+                                <div className="col-span-1">
+                                  <div className="space-y-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Intérêts mensuels projetés</p>
+                                      <p className="text-base font-semibold text-green-500 mt-1">
+                                        {formatCurrency((item.quantity * (item.interest_rate || 0)) / 1200)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Rendement</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                                        <p className="text-base font-semibold text-green-500">
+                                          {item.interest_rate}% par an
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* Original display for ETFs and Crypto */}
+                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Quantité</p>
+                                    <p className="text-base font-semibold mt-1">{item.quantity.toFixed(item.quantity < 1 ? 8 : 2)}</p>
+                                  </div>
+                                  <div className="sm:mt-3">
+                                    <p className="text-sm font-medium text-muted-foreground">Valeur totale</p>
+                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.value)}</p>
+                                  </div>
+                                </div>
+
+                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Prix actuel</p>
+                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.currentPrice)}</p>
+                                  </div>
+                                  <div className="sm:mt-3">
+                                    <p className="text-sm font-medium text-muted-foreground">Prix moyen</p>
+                                    <p className="text-base font-semibold mt-1">{formatCurrency(item.averagePrice)}</p>
+                                  </div>
+                                </div>
+
+                                <div className="col-span-1 grid grid-cols-2 sm:block gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Plus/Moins value</p>
+                                    <p className={`text-base font-semibold mt-1 ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                      {formatCurrency(item.profitLoss)}
+                                    </p>
+                                  </div>
+                                  <div className="sm:mt-3">
+                                    <p className="text-sm font-medium text-muted-foreground">Performance</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {item.profitLoss >= 0 ? (
+                                        <ArrowUpIcon className="w-4 h-4 text-green-500" />
+                                      ) : (
+                                        <ArrowDownIcon className="w-4 h-4 text-red-500" />
+                                      )}
+                                      <p className={`text-base font-semibold ${item.profitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                        {formatPercentage(item.profitLossPercentage)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
