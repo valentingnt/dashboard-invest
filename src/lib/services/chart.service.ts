@@ -1,4 +1,4 @@
-import { Asset, AssetWithPrice, Transaction } from '@/lib/types'
+import { AssetWithPrice, Transaction } from '@/lib/types'
 
 export interface ChartDataPoint {
   date: string;
