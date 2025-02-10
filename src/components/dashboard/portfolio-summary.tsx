@@ -27,7 +27,7 @@ export function PortfolioSummary({
               </p>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 sm:gap-8 pt-4 sm:pt-6 border-t border-primary/10">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-8 pt-4 sm:pt-6 border-t border-primary/10">
               <div>
                 <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Investi</p>
                 <p className="text-lg sm:text-xl font-semibold mt-2">{formatCurrency(totalInvested)}</p>
@@ -42,6 +42,14 @@ export function PortfolioSummary({
                   )}
                   <p className={`text-lg sm:text-xl font-semibold ${totalProfitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {formatPercentage(totalProfitLossPercentage)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2 flex-col">
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Plus/Moins value</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <p className={`text-lg sm:text-xl font-semibold ${totalProfitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {formatCurrency(totalProfitLoss)}
                   </p>
                 </div>
               </div>
