@@ -45,7 +45,7 @@ export function PortfolioSummary({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-2 flex-col">
+              <div>
                 <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Plus/Moins value</p>
                 <div className="flex items-center gap-2 mt-2">
                   <p className={`text-lg sm:text-xl font-semibold ${totalProfitLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
